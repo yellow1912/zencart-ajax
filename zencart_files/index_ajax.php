@@ -9,13 +9,11 @@
  */
 
 if(isset($_GET['ajax_action']) && !empty($_GET['ajax_action'])){
-	
 	$rb_ajax_action = str_ireplace(array('/','\\','.','@','#','&','*'), '',$_GET['ajax_action']);
 	
 	require('includes/application_top.php');
-	$language_page_directory = DIR_WS_LANGUAGES . $_SESSION['language'] . '/';
-	
 	$Ajax->setReturnBlocks('*');
+	$language_page_directory = DIR_WS_LANGUAGES . $_SESSION['language'] . '/';
 	
 	// get the language file
 	if ( file_exists("{$language_page_directory}/ajax/{$template_dir}/{$rb_ajax_action}.php") ) 
@@ -28,13 +26,10 @@ if(isset($_GET['ajax_action']) && !empty($_GET['ajax_action'])){
   	require(DIR_WS_MODULES . 'ajax/' . $template_dir . '/' . "{$rb_ajax_action}.php");
 	elseif (file_exists(DIR_WS_MODULES . 'ajax/' . "{$rb_ajax_action}.php")) 
   	require(DIR_WS_MODULES . 'ajax/' . "{$rb_ajax_action}.php");
-	
+
 	// get the template file
-	if($Ajax->startBlock('mainContent')){
-	
-		require($template->get_template_dir("{$rb_ajax_action}.php",DIR_WS_TEMPLATE, $current_page_base,'ajax'). "/{$rb_ajax_action}.php");
-		$Ajax->endBlock();
-	}
+	require($template->get_template_dir("{$rb_ajax_action}.php",DIR_WS_TEMPLATE, $current_page_base,'ajax'). "/{$rb_ajax_action}.php");
+
 	$Ajax->end();
 	require(DIR_WS_INCLUDES . 'application_bottom.php');
 }

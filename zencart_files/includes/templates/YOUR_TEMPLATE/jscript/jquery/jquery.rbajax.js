@@ -7,25 +7,25 @@
   // 
 
   $.fn.rbajax = function(options) {  	
-	$selector = $(this);
+	var $selector = $(this);
    	// build main options before element iteration
    	var opts = jQuery.extend({
    	type: '',
    	url: '',	
-   	iframe: true,
+   	iframe: false,
    	loadCss: false,
    	loadJs: false,
 	messageTarget: 'output',
     data: {isajaxrequest: '1'},
     validateOptions: {rules: {}, messages: {}},
-    faceboxId: '',
     beforeSubmit: '',
     beforeSuccess: '',
     afterSuccess: '',
     beforeError: '',
-    afterError: ''
+    afterError: '',
+    complete: ''
   	}, options);		
-			
+
 	$('#'+opts.messageTarget).attr('tabindex', -1);
 	$.fn.displayMessage = function (msg, opts){
 		$('#'+opts.messageTarget).focus().html(msg);
@@ -50,6 +50,7 @@
 				
 			switch(response.status){
 				case 'success':
+				case 'error':
 					// load css
 					//$.requireConfig.routeCss = '<?php echo DIR_WS_TEMPLATE;?>css/';
 					if(opts.loadCss && response.load !== undefined){
@@ -58,12 +59,7 @@
 			      	$.include(val);
 			  		});	
 					}
-		  		// facebox?
-		  		if(opts.faceboxId != ''){
-		  			$.facebox('<div id="'+opts.faceboxId+'"></div>');
-	//	  			$.rbajax("#"+opts.faceboxId, opts.faceboxOptions);
-		  		}
-		  		
+		  			  		
 					// update the content
 					if(response.content !== undefined && response.content !== null){
 						jQuery.each(response.content, function(i, val) {
@@ -105,6 +101,7 @@
 						}
 					}
 					break;
+					
 				case 'redirect':
 					var url = urldecode(response.url);
 					if($.fn.rbajax.redirect[response.redirect_type] !== undefined)
@@ -133,30 +130,34 @@
 				var element = this;
 				if(opts.beforeSubmit != '') opts.beforeSubmit(element, opts);
 				$.ajax({
-	  		type: "GET",
+	  		    type: "GET",
 				data: opts.data,
 				url: opts.url != '' ? opts.url : $(this).attr('href'),
 				dataType: 'json',
-				success: function(data, textStatus){
+				success: function(data, textStatus, jqXHR){
 								if ($.isFunction(opts.beforeSuccess))
-									opts.beforeSuccess(element, data, textStatus, opts);
+									opts.beforeSuccess(element,data, textStatus, jqXHR);
 			         	
 								updateContent(data, textStatus, opts);
-			         	
-			         	if ($.isFunction(opts.afterSuccess))
-									opts.afterSuccess(element, data, textStatus, opts);
+
+		         	if ($.isFunction(opts.afterSuccess))
+									opts.afterSuccess(element, data, textStatus, jqXHR);
 			        	},
-			  error: function(xhr) {
+                error: function(jqXHR, textStatus, errorThrown) {
 			  				if ($.isFunction(opts.beforeError))
-	  							opts.beforeError(element, data, textStatus, opts);
+	  							opts.beforeError(element, jqXHR, textStatus, errorThrown);
 	  							
-								$.fn.displayMessage('Error: ' + xhr.status + ' ' + xhr.statusText + ' ' + xhr.responseText, opts);
+								$.fn.displayMessage('Error: ' + jqXHR.status + ' ' + jqXHR.statusText + ' ' + jqXHR.errorThrown, opts);
 								
 								if ($.isFunction(opts.afterError))
-	  							opts.afterError(element, data, textStatus, opts);
-								}
+	  							opts.afterError(element, jqXHR, textStatus, errorThrown);
+								},
+			    complete: function(jqXHR, textStatus) {
+			    	        if ($.isFunction(opts.complete))
+			    	        	opts.complete(element, jqXHR, textStatus);
+			    }
 				});
-				e.preventDefault()
+				e.preventDefault();
 			}
 		}); 
 	}
@@ -170,33 +171,37 @@
 	 		var element = this;
 	 		if(opts.beforeSubmit != '') opts.beforeSubmit(element, opts);
 			$(this).ajaxSubmit({ 
-				dataType:  'json',
-			  success: function(data, textStatus){
+		    dataType:  'json',
+			success: function(data, textStatus, jqXHR){
 			  	if ($.isFunction(opts.beforeSuccess))
-							opts.beforeSuccess(element, data, textStatus, opts);
+							opts.beforeSuccess(element, data, textStatus, jqXHR);
 	         	
 						updateContent(data, textStatus, opts);
 	         	
 	         	if ($.isFunction(opts.afterSuccess))
-							opts.afterSuccess(element, data, textStatus, opts);
-    		},
-				error: function(xhr) {
+							opts.afterSuccess(element, data, textStatus, jqXHR);
+    		  },
+			error: function(jqXHR, textStatus, errorThrown) {
 					if ($.isFunction(opts.beforeError))
-							opts.beforeError(element, data, textStatus, opts);
+							opts.beforeError(element, jqXHR, textStatus, errorThrown);
 							
-						$.fn.displayMessage('Error: ' + xhr.status + ' ' + xhr.statusText + ' ' + xhr.responseText, opts);
+					$.fn.displayMessage('Error: ' + jqXHR.status + ' ' + jqXHR.statusText + ' ' + jqXHR.errorThrown, opts);
 						
 						if ($.isFunction(opts.afterError))
-							opts.afterError(element, data, textStatus, opts);
-				},
-				data: data,
-				iframe: opts.iframe,
-				url: opts.url != '' ? opts.url : $(element).attr('action')
-			 });
+							opts.afterError(element, jqXHR, textStatus, errorThrown);
+			},
+			complete: function(jqXHR, textStatus) {
+    	        if ($.isFunction(opts.complete))
+    	        	opts.complete(element, jqXHR, textStatus);
+            },
+			data: data,
+			iframe: opts.iframe,
+			url: opts.url != '' ? opts.url : $(element).attr('action')
+			});
 			return false;
-  	})
+  	});
 	}
- }
+  };
   $.fn.rbajax.redirect = [];
   
   //
@@ -243,7 +248,7 @@
  
     for (replace in histogram) {
         search = histogram[replace]; // Switch order when decoding
-        ret = replacer(search, replace, ret) // Custom replace. No regexing   
+        ret = replacer(search, replace, ret); // Custom replace. No regexing   
     }
     
     // End with decodeURIComponent, which most resembles PHP's encoding functions
