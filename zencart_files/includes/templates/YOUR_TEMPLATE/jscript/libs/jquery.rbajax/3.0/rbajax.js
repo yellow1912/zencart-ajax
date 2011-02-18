@@ -15,13 +15,13 @@
 		{
 			$('#'+target).html('');
 		},
-		updateContent: function(response, status, opts)
+		updateContent: function(response)
 		{
 			if(response !== null){			
 				// update the content
 				if(response.content !== undefined && response.content !== null){
 					jQuery.each(response.content, function(i, val) {
-						if(val != '') 
+						if(val !== '') 
 							$("#" + i).html(val);
 					});			
 				}
@@ -77,10 +77,6 @@
 		})
 	}
 	
-	function test (){
-		alert("aaa");
-		
-	}
 	function bindLink(e2, opts) 
 	{
 		$.extend(opts.ajax, {
@@ -132,8 +128,10 @@
 		if(settings.ajax.success === undefined)
 			settings.ajax.success = function(data, textStatus, jqXHR){
 				if(data.message !== undefined)
-				methods.displayMessage.apply(this, [response.message, settings.messageTarget]);
+				methods.displayMessage.apply(this, [data.message, settings.messageTarget]);
 				else methods.resetMessage.apply(this, [settings.messageTarget]);
+				
+				methods.updateContent.apply(this, [data]);
 				
 				if(data.status == 'redirect') methods.redirect.apply(this, [data, settings]);
 			}

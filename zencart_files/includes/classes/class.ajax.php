@@ -11,18 +11,31 @@
 class Ajax{
   var $status = false;
   var $content = array();
-  var $return_blocks = array();
-  var $allowed_blocks = array();
   var $messages = array();
   var $block_queue = array();
-  var $structure = array();
+  var $return_blocks = array();
+  var $allowed_blocks = array();
   var $new_blocks = array();
+  var $structure = array();
+  var $_structure = array();
+  var $_current_block = '';
   var $map = array();
   var $flip_map = array();
   var $hooks = array();
-  var $link_map = array();
   var $options = array();
 
+  public function Ajax(){
+  	$this->_current = '<----top---->';
+  	$this->_structure['<----top---->'] = array('children' => array());	
+	$this->flip_map = array('<----top---->' => 0);
+	$this->map = array(0 => '<----top---->');
+  }
+  
+  public function set($data, $recursive = true){
+  	global $Json;
+  	$Json->set($data, $recursive);
+  }
+  
   public function setOption($name, $value){
     $this->options[$name] = $value;
   }
@@ -35,7 +48,7 @@ class Ajax{
   	// set status
   	if(((isset($_SERVER['HTTP_X_REQUESTED_WITH'])) && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest') || (isset($_REQUEST['isajaxrequest']) && $_REQUEST['isajaxrequest'] == 1)){
   		$this->status = true;
-  		
+
   		// start buffering
   		ob_start();
   	}
@@ -50,12 +63,12 @@ class Ajax{
   		$css = $jscript_ = array();
   		$css_inline = $jscript_inline = '';
   		
-  		$RI_CJLoader->set(array('ajax' => true, 'load_global' => false, 'load_print' => false));
-  		
+  		$RI_CJLoader->set(array('ajax' => true, 'load_global' => false, 'load_print' => false, 'loaders' => array()));
+  		$RI_CJLoader->autoloadLoaders();
   		$RI_CJLoader->loadCssJsFiles();
   		
   		$files = $RI_CJLoader->processCssJsFiles();
-  	  foreach($files['css'] as $file)
+  	  	foreach($files['css'] as $file)
   	  	if($file['include']) {
   	  		ob_start();	
   	  		include($file['src']);
@@ -85,49 +98,67 @@ class Ajax{
   		ob_end_clean();
   			
   		$this->proccessMessageStack();
-  		
+
   		$status = $Json->get('status');
   		if(empty($status))
   			$status = isset($this->messages['error']) ? 'error' : 'success';
-  		
+
   		// insert the block structure into database if we have to
   		if(count($this->new_blocks) > 0){
   			global $db;
-  			$this->new_blocks['structure']['top'] = array('parent' => 'top', 'id' => 0);
+ 
   			// insert new
   			if(is_array($this->new_blocks['new']))
-  			foreach($this->new_blocks['new'] as $block){
-  				$parent_id = isset($this->flip_map[$this->new_blocks['structure'][$block]['parent']]) ? $this->flip_map[$this->new_blocks['structure'][$block]['parent']] : $this->new_blocks['structure'][$this->new_blocks['structure'][$block]['parent']]['id'];
-  				$db->Execute("INSERT IGNORE INTO ".TABLE_AJAX_BLOCKS."(block, parent_id) VALUES ('$block', ".$parent_id.")");
-  				$this->new_blocks['structure'][$block]['id'] = mysql_insert_id();
+  			{
+	  			// we reverse the array because the children go in last
+	  			
+	  			foreach($this->new_blocks['new'] as $block){
+	  				$parent = $this->_structure[$block]['parent'];
+	  				if(isset($this->flip_map[$parent])) $parent_id = $this->flip_map[$parent];
+	  				else 
+	  				{
+	  					// we need to try inserting the parent then 
+	  				}
+	  				
+	  				$db->Execute("INSERT IGNORE INTO ".TABLE_AJAX_BLOCKS."(block, parent_id) VALUES ('$block', ".$parent_id.")");
+	  				$this->flip_map[$block] = mysql_insert_id();
+	  				$this->map[$this->flip_map[$block]] = $block;
+	  			}
   			}
-  			
   			// update
   			if(is_array($this->new_blocks['update']))
-  			foreach($this->new_blocks['update'] as $block=>$block_structure){
-  				$id = $block_structure['id'];
-  				$parent_id = isset($this->flip_map[$this->new_blocks['structure'][$block]['parent']]) ? $this->flip_map[$this->new_blocks['structure'][$block]['parent']] : $this->new_blocks['structure'][$this->new_blocks['structure'][$block]['parent']]['id'];
-  				$db->Execute("UPDATE ".TABLE_AJAX_BLOCKS." SET parent_id = $parent_id WHERE id = $id");
+  			{
+	  			foreach($this->new_blocks['update'] as $id => $parent_id){
+	  				$db->Execute("UPDATE ".TABLE_AJAX_BLOCKS." SET parent_id = $parent_id WHERE id = $id");
+	  			}
   			}
   		}
-  		
+
   		// return only the blocks we need
-  		if($this->return_blocks == '*')
-  			$content = $this->content;
+  		if($this->getOption('process_all_blocks')){
+			if(AJAX_CONVERT_TO_UTF8 && strtoupper(CHARSET) != "UTF-8"){
+				foreach ($this->content as $key => $value){	
+					if(function_exists('iconv'))
+  						$content[$key] = iconv(CHARSET, "UTF-8//TRANSLIT", $value);
+  					else 
+  						$content[$key] = $value;	
+				}
+			}
+			else
+				$content = $this->content;
+		}
   		else
-  		foreach($this->return_blocks as $return_block)
+  		foreach($this->return_blocks as $return_block){  	
   			if(isset($this->content[$return_block])){
   				// encode if needed to
   				if(AJAX_CONVERT_TO_UTF8 && strtoupper(CHARSET) != "UTF-8")
-  					//$this->content[$return_block] = utf8_encode($this->content[$return_block]);
   						if(function_exists('iconv'))
-  						$this->content[$return_block] = iconv(CHARSET, "UTF-8//TRANSLIT", $this->content[$return_block]);
+  						$content[$return_block] = iconv(CHARSET, "UTF-8//TRANSLIT", $this->content[$return_block]);
   						else 
-  						$this->content[$return_block] = $this->content[$return_block];	
-  						
-  				$content[$return_block]	= $this->content[$return_block];
+  						$content[$return_block] = $this->content[$return_block];	
   			}
-  			
+  		}
+
   		if(!$Json->exist('id')){
   			global $current_page_base;
   			$Json->set(array('id' => $current_page_base));	
@@ -139,8 +170,9 @@ class Ajax{
   			echo "<textarea>".$Json->getJson()."</textarea>";
   			exit();
   		}
-  		else
-  			$Json->getJsonAndExit(array('content' => $content, 'status' => $status));
+  		else{
+  			$Json->setJsonAndExit(array('content' => $content, 'status' => $status));
+		}
   	}
   }
   
@@ -172,11 +204,6 @@ class Ajax{
   	if($reset) { $messageStack->reset(); unset($_SESSION['messageToStack']);}
   }
   
-//  function resetMessageStack(){
-//    global $messageStack;
-//    $messageStack->reset();
-//  }
-  
   function setOptions($options){
   	global $Json;
   	$Json->set($options);
@@ -189,10 +216,11 @@ class Ajax{
   		$blocks = explode(',', zen_db_input($_REQUEST['ajax_return_blocks']));
   	
   	$this->return_blocks = $blocks;
-  	
+
   	// load all?
-  	if($this->return_blocks == '*') return;
-  	
+  	if($this->return_blocks == '*') {$this->setOption('process_all_blocks',true);}
+	else $this->setOption('process_all_blocks',false);
+
   	// we will see if the structure is ready
   	
   	if(isset($_SESSION['block_structure']) && isset($_SESSION['block_map']) && isset($_SESSION['block_flip_map'])){
@@ -202,31 +230,47 @@ class Ajax{
   	}
   	else{
   		$db_blocks = $db->Execute("SELECT * FROM ".TABLE_AJAX_BLOCKS);
-  		while(!$db_blocks->EOF){
-          $this->map[$db_blocks->fields['id']] = $this->structure[$db_blocks->fields['id']]['block'] = $db_blocks->fields['block'];
-          $this->flip_map[$db_blocks->fields['block']] = $db_blocks->fields['id'];
-          $this->structure[$db_blocks->fields['id']]['parent_id']					= $db_blocks->fields['parent_id'];
-          $this->structure[$db_blocks->fields['id']]['path'][] 						= $db_blocks->fields['id'];
-          $this->structure[$db_blocks->fields['parent_id']]['children'][] = $db_blocks->fields['id'];;
-          $db_blocks->MoveNext();
+  		if($db_blocks->RecordCount() > 0){
+	  		while(!$db_blocks->EOF){
+	          $this->map[$db_blocks->fields['id']] = $this->structure[$db_blocks->fields['id']]['block'] = $db_blocks->fields['block'];
+	          $this->flip_map[$db_blocks->fields['block']] = $db_blocks->fields['id'];
+	          $this->structure[$db_blocks->fields['id']]['parent_id'] = $db_blocks->fields['parent_id'];
+	          $this->structure[$db_blocks->fields['id']]['path'][] = $db_blocks->fields['id'];
+	          $this->structure[$db_blocks->fields['parent_id']]['children'][] = $db_blocks->fields['id'];;
+	          $db_blocks->MoveNext();
+	  		}
+	  	
+	  		$this->structure[0]['block'] = '<----top---->';
+	  		// walk through the array and build sub/cPath and other addtional info needed
+	  		foreach($this->structure as $key => $value){
+	  			if(!isset($value['block']))
+	  				$this->setOption('process_all_blocks',true);
+	  			// only merge if parent cat is not 0
+	  			if(isset($this->structure[$key]['parent_id']) && $this->structure[$key]['parent_id'] > 0){
+	  				if(is_array($this->structure[$this->structure[$key]['parent_id']]['path']) && count($this->structure[$this->structure[$key]['parent_id']]['path'])> 0)
+	  					$this->structure[$key]['path'] = array_merge($this->structure[$this->structure[$key]['parent_id']]['path'],$this->structure[$key]['path']);
+	  			}
+	  		}
+	  		$_SESSION['block_structure'] = $this->structure;
+	  		$_SESSION['block_map'] = $this->map;
+	  		$_SESSION['block_flip_map'] = $this->flip_map;
   		}
-  	
-  		$this->structure[0]['block'] = '<---top--->';
-  		// walk through the array and build sub/cPath and other addtional info needed
-  		foreach($this->structure as $key => $value){
-  			if(!isset($value['block']))
-  				$this->setOption('process_all_blocks',true);
-  			// only merge if parent cat is not 0
-  			if(isset($this->structure[$key]['parent_id']) && $this->structure[$key]['parent_id'] > 0){
-  				if(is_array($this->structure[$this->structure[$key]['parent_id']]['path']) && count($this->structure[$this->structure[$key]['parent_id']]['path'])> 0)
-  					$this->structure[$key]['path'] = array_merge($this->structure[$this->structure[$key]['parent_id']]['path'],$this->structure[$key]['path']);
-  			}
-  		}
-  		$_SESSION['block_structure'] = $this->structure;
-  		$_SESSION['block_map'] = $this->map;
-  		$_SESSION['block_flip_map'] = $this->flip_map;
+  		else
+  		{
+  			$this->map = array(0 => "<----top---->");
+  			$this->flip_map = array("<----top---->" => 0);
+  			$this->structure = array ( 0 =>  array ("block" => "<----top---->",
+  													"parent_id" => 0,
+    												"path" => array( 0 => 1)
+  													)
+  									);
+    	}
   	}
-  	$diff = array_diff($this->return_blocks, $this->map);				
+  	if(is_array($this->return_blocks))
+  	$diff = array_diff($this->return_blocks, $this->map);
+  	else 
+  	$diff = $this->map;
+  	
   	if(count($diff) > 0){
   		$this->setOption('process_all_blocks',true);
   	}
@@ -260,17 +304,21 @@ class Ajax{
   	}
   }
   
-  function startBlock($block_name){		
+  function startBlock($block_name){
   	if(!$this->status)
   		return true;
   	
   	elseif(!$this->getOption('process_all_blocks') && !$this->checkAllowedBlock($block_name))
   		return false;
   	
-  	if($this->getOption('process_all_blocks') && !isset($this->flip_map[$block_name]))
+  	// mark the block for insertion
+  	if(!isset($this->flip_map[$block_name]))
   		$this->new_blocks['new'][] = $block_name;	
   		
-  	$this->block_queue[] = 	$block_name;
+  	$this->_structure[$block_name]['parent'] = !empty($this->block_queue) ? end($this->block_queue) : '<----top---->';
+  	$this->_structure[$this->_current]['children'][] = $block_name;
+  	
+  	$this->_current = $this->block_queue[] = 	$block_name;
   	ob_start();
   	return true;
   }
@@ -281,33 +329,22 @@ class Ajax{
   	
   	$block_name = array_pop($this->block_queue);		
   	$this->content[$block_name] = ob_get_clean();
+ 
+  	$this->_current = $this->_structure[$block_name]['parent'];
   	
-  	if($this->return_blocks == '*') return true;
-  	//print_nice($this->map);
-  	//print_nice($this->structure);
-  	//exit();
-  	$b = (empty($this->block_queue)) ? 'top' : end($this->block_queue);
-  	if($this->getOption('process_all_blocks')){
-  		// insert new blocks
-  		//if(isset($this->flip_map[$block_name])){
-  			//$this->new_blocks['insert'][$b]['id'] = 0;
-  			$this->new_blocks['structure'][$block_name]['parent'] = $b;
-  			$this->new_blocks['structure'][$block_name]['id'] = 0;
-  			//$this->new_blocks['insert'][$b]['children'][] = $block_name;				
-  		//}
-  		
-  		// checking if the blocks have new parents, thus need updating parent_id
-  		if(@in_array($b, $this->new_blocks['new']) && !@in_array($block_name, $this->new_blocks['new'])) {
-  			$this->new_blocks['update'][$b]['id'] = 0;
-  			$this->new_blocks['update'][$b]['children'][] = $block_name;
-  		}
-  		
-  		// we check if we have to update parent id for some reason
-  		if(isset($this->flip_map[$b]) && isset($this->flip_map[$block_name]) && ($this->structure[$this->flip_map[$block_name]]['parent_id'] != $this->flip_map[$b]) ){
-  			$this->new_blocks['update'][$b]['id'] = $this->flip_map[$b];
-  			$this->new_blocks['update'][$b]['children'][] = $block_name;
-  		}
-  	}		
+  	$b = (empty($this->block_queue)) ? '<----top---->' : end($this->block_queue);
+  	
+	// checking if the blocks have new parents, thus need updating parent_id
+//	if(@in_array($b, $this->new_blocks['new']) && !@in_array($block_name, $this->new_blocks['new'])) {
+//		$this->new_blocks['update'][$b]['id'] = 0;
+//		$this->new_blocks['update'][$b]['children'][] = $block_name;
+//	}
+	
+	// we check if we have to update parent id for some reason
+	if($b != '<----top---->' && isset($this->flip_map[$b]) && isset($this->flip_map[$block_name]) && ($this->structure[$this->flip_map[$block_name]]['parent_id'] != $this->flip_map[$b]) ){
+		$this->new_blocks['update'][$this->flip_map[$block_name]] = $this->flip_map[$b];
+	}
+  			
   	return true;
   }
   	
@@ -319,7 +356,7 @@ class Ajax{
   		// TODO: we map if we have to
   		// end mapping
   		$this->proccessMessageStack(false);
-  		$Json->reset();
+  		//$Json->reset();
   		/*
   		// here we want to attempt to make sure that it understands we are still in ajax mode
   		// TODO: for seo module we will have to do something here
@@ -433,57 +470,4 @@ class Ajax{
  	  call_user_func_array($hook['function'], $hook['parameters']);
   	}
   }
-  
-  function map($map=array()){
-  	$this->link_map = $map;
-  }
 }
-/*
-function print_nice($elem,$max_level=10,$print_nice_stack=array()){
-    if(is_array($elem) || is_object($elem)){
-        if(in_array(&$elem,$print_nice_stack,true)){
-            echo "<font color=red>RECURSION</font>";
-            return;
-        }
-        $print_nice_stack[]=&$elem;
-        if($max_level<1){
-            echo "<font color=red>nivel maximo alcanzado</font>";
-            return;
-        }
-        $max_level--;
-        echo "<table border=1 cellspacing=0 cellpadding=3 width=100%>";
-        if(is_array($elem)){
-            echo '<tr><td colspan=2 style="background-color:#333333;"><strong><font color=white>ARRAY</font></strong></td></tr>';
-        }else{
-            echo '<tr><td colspan=2 style="background-color:#333333;"><strong>';
-            echo '<font color=white>OBJECT Type: '.get_class($elem).'</font></strong></td></tr>';
-        }
-        $color=0;
-        foreach($elem as $k => $v){
-            if($max_level%2){
-                $rgb=($color++%2)?"#888888":"#BBBBBB";
-            }else{
-                $rgb=($color++%2)?"#8888BB":"#BBBBFF";
-            }
-            echo '<tr><td valign="top" style="width:40px;background-color:'.$rgb.';">';
-            echo '<strong>'.$k."</strong></td><td>";
-            print_nice($v,$max_level,$print_nice_stack);
-            echo "</td></tr>";
-        }
-        echo "</table>";
-        return;
-    }
-    if($elem === null){
-        echo "<font color=green>NULL</font>";
-    }elseif($elem === 0){
-        echo "0";
-    }elseif($elem === true){
-        echo "<font color=green>TRUE</font>";
-    }elseif($elem === false){
-        echo "<font color=green>FALSE</font>";
-    }elseif($elem === ""){
-        echo "<font color=green>EMPTY STRING</font>";
-    }else{
-        echo str_replace("\n","<strong><font color=red>*</font></strong><br>\n",$elem);
-    }
-}*/

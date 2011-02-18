@@ -15,8 +15,8 @@ class Json{
 		$this->json = array();
 	}
 	
-	function set($data){
-		$this->json = array_merge_recursive($this->json, $data);
+	function set($data, $recursive = false){
+		$this->json = $recursive ? array_merge_recursive($this->json, $data) : array_merge($this->json, $data);
 	}
 	
 	function get($key = null){
@@ -64,8 +64,8 @@ class Json{
 		return json_encode($this->json);	
 	}
 	
-	function setJsonAndExit($data){
-		$this->set($data);
+	function setJsonAndExit($data, $recursive = false){
+		$this->set($data, $recursive);
 		echo $this->getJson();
 		$this->_exit();
 	}
