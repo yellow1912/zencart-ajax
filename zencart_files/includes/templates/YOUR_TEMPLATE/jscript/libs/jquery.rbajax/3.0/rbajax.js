@@ -7,17 +7,17 @@
 	// 
 
 	var methods = {
-		displayMessage: function(msg, target)
+		displayMessage: function(msg)
 		{
-			$('#'+target).focus().html(msg);
+			$('#'+$this.data('rbajax.settings').messageTarget).focus().html(msg);
 		},
-		resetMessage: function(target)
+		resetMessage: function()
 		{
-			$('#'+target).html('');
+			$('#'+$this.data('rbajax.settings').messageTarget).html('');
 		},
 		updateContent: function(response)
 		{
-			if(response !== null){			
+			if(response !== null){		
 				// update the content
 				if(response.content !== undefined && response.content !== null){
 					jQuery.each(response.content, function(i, val) {
@@ -54,13 +54,13 @@
 				}
 			}
 		},
-		redirect: function (response, opts)
+		redirect: function (response)
 		{
 			var url = urldecode(response.url);
 			if($.fn.rbajax.redirect[response.redirect_type] !== undefined)
 				$.fn.rbajax.redirect[response.redirect_type](url);
 			else
-				$.fn.rbajax.redirect.defaultRedirect(url,opts);
+				$.fn.rbajax.redirect.defaultRedirect(url,$this.data('rbajax.settings'));
 		}
 	}
 	
@@ -94,7 +94,7 @@
 	function bindForm (e2, opts)
 	{
 		// binding to forms			
-	 	e2.bind("submit", function(){
+	 	e2.bind("submit", function(e){
 	 		var element = this;
 			e2.ajaxSubmit(opts.ajax);
 			e.preventDefault();
@@ -123,17 +123,18 @@
 		if ( options ) { 
 			$.extend(true, settings, options);		
 		}
-
+		
 		// set the default success callback
 		if(settings.ajax.success === undefined)
 			settings.ajax.success = function(data, textStatus, jqXHR){
+
 				if(data.message !== undefined)
-				methods.displayMessage.apply(this, [data.message, settings.messageTarget]);
-				else methods.resetMessage.apply(this, [settings.messageTarget]);
+				methods.displayMessage.apply(this, [data.message]);
+				else methods.resetMessage.apply(this);
 				
 				methods.updateContent.apply(this, [data]);
 				
-				if(data.status == 'redirect') methods.redirect.apply(this, [data, settings]);
+				if(data.status == 'redirect') methods.redirect.apply(this, [data]);
 			}
 		
 		// set the default error callback
@@ -155,6 +156,8 @@
 		{
 			return this.each(function(){
 				$this = $(this);
+				$this.data('rbajax.settings', settings);
+
 				var elementType = settings.type == '' ? $this.attr('tagName') : settings.type;
 				switch(elementType)
 				{
